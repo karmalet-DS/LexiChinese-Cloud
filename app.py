@@ -22,6 +22,7 @@ from utils.prompts import (
     QUIZ_SYSTEM, QUIZ_MEANING_USER, QUIZ_CONTEXT_USER, QUIZ_KOREAN_USER,
     CONTEXTUAL_CHECK_SYSTEM, CONTEXTUAL_CHECK_USER,
 )
+from utils.hsk_vocab import sample_vocab_text, vocab_count
 
 load_dotenv()
 
@@ -90,13 +91,13 @@ with st.sidebar:
     st.divider()
 
     st.markdown("### 🤖 모델 설정")
-    st.caption("기본: Claude(구조화) + GPT(심화)")
-    gpt_model = st.selectbox("GPT 모델", ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"], index=0)
+    st.caption("Claude(기본) + GPT(심화)")
     claude_model = st.selectbox("Claude 모델", ["claude-4-sonnet-20250514", "claude-3-haiku-20240307"], index=0)
+    gpt_model = st.selectbox("GPT 모델", ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"], index=0)
     st.divider()
     st.markdown(
         "<div style='text-align:center; color:#aaa; font-size:0.8rem;'>"
-        "LexiChinese v1.2<br>덕성여자대학교 중어중문학전공<br>박민준 교수</div>",
+        "LexiChinese v1.1</div>",
         unsafe_allow_html=True,
     )
 
@@ -296,30 +297,39 @@ with tab2:
     st.markdown("### 📝 예문 생성기")
     st.caption("HSK 수준에 맞는 예문을 생성하고, 한국어 대응 표현을 자동 연결합니다.")
 
-    col_ex1, col_ex2 = st.columns([3, 1])
+    col_ex1, col_ex2, col_ex3 = st.columns([3, 1, 1])
     with col_ex1:
         expr_example = st.text_input(
             "중국어 표현 입력", placeholder="예: 半途而废, 亡羊补牢",
             label_visibility="collapsed", key="example_input")
     with col_ex2:
         hsk_level = st.selectbox("HSK 수준", [3, 4, 5, 6], index=1, key="hsk_level")
+    with col_ex3:
+        example_model = st.selectbox("모델", ["GPT", "Claude"], index=0, key="example_model")
 
     if st.button("📝 예문 생성", type="primary", key="example_btn"):
         if expr_example:
             st.session_state["example_expr"] = expr_example
             st.session_state["example_hsk"] = hsk_level
             st.session_state["trap_example"] = None
-            with st.spinner(f"HSK {hsk_level}급 수준 예문 생성 중 (GPT)..."):
-                st.session_state["example_result"] = call_gpt(
+            model_label = "GPT" if example_model == "GPT" else "Claude"
+            call_fn = call_gpt if example_model == "GPT" else call_claude_fn
+            with st.spinner(f"HSK {hsk_level}급 수준 예문 생성 중 ({model_label})..."):
+                st.session_state["example_result"] = call_fn(
                     EXAMPLE_SYSTEM,
-                    EXAMPLE_USER.format(expression=expr_example, hsk_level=hsk_level))
+                    EXAMPLE_USER.format(
+                        expression=expr_example,
+                        hsk_level=hsk_level,
+                        vocab_sample=sample_vocab_text(hsk_level, 40),
+                        vocab_count=vocab_count(hsk_level)))
 
     if st.session_state.get("example_result"):
         st.markdown(st.session_state["example_result"])
+        bridge_model = st.session_state.get("example_model", "GPT")
         st.markdown(
             '<div class="korean-bridge">'
             '🇰🇷 <strong>한국어 대응 연결 (Korean Bridge)</strong><br>'
-            '위 예문에 포함된 한국어 대응 표현은 GPT가 자동 생성한 것입니다.'
+            f'위 예문에 포함된 한국어 대응 표현은 {bridge_model}가 자동 생성한 것입니다.'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -351,10 +361,14 @@ with tab3:
         ["📖 의미 선택형 (T1)", "📋 용례 판단형 (T2)", "🇰🇷 한국어 유사 표현 선택형 (T3)"],
         horizontal=True, key="quiz_type",
     )
-    expr_quiz = st.text_input(
-        "중국어 표현 입력", placeholder="예: 守株待兔",
-        label_visibility="collapsed", key="quiz_input",
-    )
+    col_q1, col_q2 = st.columns([4, 1])
+    with col_q1:
+        expr_quiz = st.text_input(
+            "중국어 표현 입력", placeholder="예: 守株待兔",
+            label_visibility="collapsed", key="quiz_input",
+        )
+    with col_q2:
+        quiz_model = st.selectbox("모델", ["GPT", "Claude"], index=0, key="quiz_model")
 
     if st.button("🧩 퀴즈 생성", type="primary", key="quiz_btn"):
         if expr_quiz:
@@ -367,8 +381,9 @@ with tab3:
             else:
                 prompt = QUIZ_KOREAN_USER.format(expression=expr_quiz)
             st.session_state["quiz_show_answer"] = False
-            with st.spinner("퀴즈 생성 중..."):
-                st.session_state["quiz_result"] = call_gpt(QUIZ_SYSTEM, prompt)
+            call_fn = call_gpt if quiz_model == "GPT" else call_claude_fn
+            with st.spinner(f"퀴즈 생성 중 ({quiz_model})..."):
+                st.session_state["quiz_result"] = call_fn(QUIZ_SYSTEM, prompt)
 
     if st.session_state.get("quiz_result"):
         raw = st.session_state["quiz_result"]
@@ -389,7 +404,6 @@ with tab3:
             # 교사 모드: 정답 바로 표시
             if answer_part:
                 st.divider()
-                st.markdown("### ✅ 정답 및 해설")
                 st.markdown(answer_part)
         else:
             # 학습자 모드: 버튼으로 정답 확인
@@ -398,7 +412,6 @@ with tab3:
                 if st.button("🔓 정답 확인", key="quiz_answer_btn"):
                     st.session_state["quiz_show_answer"] = True
                 if st.session_state.get("quiz_show_answer"):
-                    st.markdown("### ✅ 정답 및 해설")
                     st.markdown(answer_part)
 
         # 다운로드 (두 모드 모두, 전체 내용 포함)
