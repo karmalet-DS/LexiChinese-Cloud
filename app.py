@@ -85,10 +85,9 @@ with st.sidebar:
         st.info("📌 교사 모드: 각 탭에서 **학생들이 틀리기 쉬운 함정** 보충 교안이 추가됩니다.")
 
     st.divider()
-    st.markdown("### 🔑 API 키")
-    openai_key = st.text_input("OpenAI API Key", value=os.getenv("OPENAI_API_KEY", ""), type="password")
-    anthropic_key = st.text_input("Anthropic API Key", value=os.getenv("ANTHROPIC_API_KEY", ""), type="password")
-    st.divider()
+    # API 키는 Streamlit Secrets 또는 환경변수에서 서버사이드로만 로드 (UI 노출 금지)
+    openai_key = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+    anthropic_key = st.secrets.get("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY", ""))
 
     st.markdown("### 🤖 모델 설정")
     st.caption("Claude(기본) + GPT(심화)")
@@ -97,7 +96,7 @@ with st.sidebar:
     st.divider()
     st.markdown(
         "<div style='text-align:center; color:#aaa; font-size:0.8rem;'>"
-        "LexiChinese v1.1</div>",
+        "LexiChinese v1.3</div>",
         unsafe_allow_html=True,
     )
 
@@ -117,12 +116,12 @@ st.markdown(
 # ─────────────────────────────────────────────
 def call_gpt(system: str, user: str) -> str:
     if not openai_key:
-        return "⚠️ OpenAI API 키를 입력해 주세요."
+        return "⚠️ OpenAI API 키가 서버에 설정되지 않았습니다. 관리자에게 문의하세요."
     return call_llm(system, user, "OpenAI", openai_key, gpt_model)
 
 def call_claude_fn(system: str, user: str) -> str:
     if not anthropic_key:
-        return "⚠️ Anthropic API 키를 입력해 주세요."
+        return "⚠️ Anthropic API 키가 서버에 설정되지 않았습니다. 관리자에게 문의하세요."
     return call_llm(system, user, "Anthropic", anthropic_key, claude_model)
 
 # ─────────────────────────────────────────────
